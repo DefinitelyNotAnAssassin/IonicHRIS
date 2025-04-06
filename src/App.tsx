@@ -1,35 +1,25 @@
-import { Redirect, Route } from 'react-router-dom';
-import {
-  IonApp,
-  IonIcon,
-  IonLabel,
-  IonRouterOutlet,
-  IonTabBar,
-  IonTabButton,
-  IonTabs,
-  setupIonicReact
-} from '@ionic/react';
-import { IonReactRouter } from '@ionic/react-router';
-import { ellipse, square, triangle } from 'ionicons/icons';
-import Tab1 from './pages/Tab1';
-import Tab2 from './pages/Tab2';
-import Tab3 from './pages/Tab3';
+"use client"
+
+import type React from "react"
+import { Redirect, Route } from "react-router-dom"
+import { IonApp, IonRouterOutlet, setupIonicReact } from "@ionic/react"
+import { IonReactRouter } from "@ionic/react-router"
 
 /* Core CSS required for Ionic components to work properly */
-import '@ionic/react/css/core.css';
+import "@ionic/react/css/core.css"
 
 /* Basic CSS for apps built with Ionic */
-import '@ionic/react/css/normalize.css';
-import '@ionic/react/css/structure.css';
-import '@ionic/react/css/typography.css';
+import "@ionic/react/css/normalize.css"
+import "@ionic/react/css/structure.css"
+import "@ionic/react/css/typography.css"
 
 /* Optional CSS utils that can be commented out */
-import '@ionic/react/css/padding.css';
-import '@ionic/react/css/float-elements.css';
-import '@ionic/react/css/text-alignment.css';
-import '@ionic/react/css/text-transformation.css';
-import '@ionic/react/css/flex-utils.css';
-import '@ionic/react/css/display.css';
+import "@ionic/react/css/padding.css"
+import "@ionic/react/css/float-elements.css"
+import "@ionic/react/css/text-alignment.css"
+import "@ionic/react/css/text-transformation.css"
+import "@ionic/react/css/flex-utils.css"
+import "@ionic/react/css/display.css"
 
 /**
  * Ionic Dark Mode
@@ -40,48 +30,104 @@ import '@ionic/react/css/display.css';
 
 /* import '@ionic/react/css/palettes/dark.always.css'; */
 /* import '@ionic/react/css/palettes/dark.class.css'; */
-import '@ionic/react/css/palettes/dark.system.css';
+import "@ionic/react/css/palettes/dark.system.css"
 
 /* Theme variables */
-import './theme/variables.css';
+import "./theme/variables.css"
+import Login from "./pages/Authentication/page"
+import Dashboard from "./pages/Employees/Dashboard/page"
+import PersonalInfo from "./pages/PersonalInformation/page"
+import { AuthProvider } from "./hooks/use-auth"
+import ChangeSchedule from "./pages/ChangeSchedule/page"
+import Registration from "./pages/Registration/page"
+import OfficialBusiness from "./pages/OfficialBusinessForm/page"
+import TimeKeeping from "./pages/TimeKeeping/page"
+import Leaves from "./pages/Leaves/page"
+import HR from "./pages/HR/page"
 
-setupIonicReact();
+// Import Chart.js for dashboard graphs
+import "chart.js/auto"
+
+// Add a protected route component to handle role-based access
+import { useAuth } from "./hooks/use-auth"
+import { useHistory } from "react-router-dom"
+import { useEffect } from "react"
+
+// Protected route component for HR access
+const HRProtectedRoute: React.FC<{
+  children: React.ReactNode
+}> = ({ children }) => {
+  const { user, isAuthenticated } = useAuth()
+  const history = useHistory()
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      history.push("/login")
+      return
+    }
+
+    // Check if user is HR
+    if (user?.role !== "hr") {
+      history.push("/dashboard")
+    }
+  }, [isAuthenticated, user, history])
+
+  return <>{children}</>
+}
+
+setupIonicReact()
 
 const App: React.FC = () => (
-  <IonApp>
-    <IonReactRouter>
-      <IonTabs>
+  <AuthProvider>
+    <IonApp>
+      <IonReactRouter>
         <IonRouterOutlet>
-          <Route exact path="/tab1">
-            <Tab1 />
+          <Route path="/personal-info">
+            <PersonalInfo />
           </Route>
-          <Route exact path="/tab2">
-            <Tab2 />
+
+          <Route path="/dashboard">
+            <Dashboard />
           </Route>
-          <Route path="/tab3">
-            <Tab3 />
+
+          <Route path="/change-schedule">
+            <ChangeSchedule />
           </Route>
+
+          <Route path="/official-business">
+            <OfficialBusiness />
+          </Route>
+
+          <Route path="/time-keeping">
+            <TimeKeeping />
+          </Route>
+
+          <Route path="/leaves">
+            <Leaves />
+          </Route>
+
+          <Route path="/hr">
+            <HRProtectedRoute>
+              <HR />
+            </HRProtectedRoute>
+          </Route>
+
+          <Route path="/login">
+            <Login />
+          </Route>
+
+          <Route path="/register">
+            <Registration />
+          </Route>
+
           <Route exact path="/">
-            <Redirect to="/tab1" />
+            <Redirect to="/login" />
           </Route>
         </IonRouterOutlet>
-        <IonTabBar slot="bottom">
-          <IonTabButton tab="tab1" href="/tab1">
-            <IonIcon aria-hidden="true" icon={triangle} />
-            <IonLabel>Tab 1</IonLabel>
-          </IonTabButton>
-          <IonTabButton tab="tab2" href="/tab2">
-            <IonIcon aria-hidden="true" icon={ellipse} />
-            <IonLabel>Tab 2</IonLabel>
-          </IonTabButton>
-          <IonTabButton tab="tab3" href="/tab3">
-            <IonIcon aria-hidden="true" icon={square} />
-            <IonLabel>Tab 3</IonLabel>
-          </IonTabButton>
-        </IonTabBar>
-      </IonTabs>
-    </IonReactRouter>
-  </IonApp>
-);
+      </IonReactRouter>
+    </IonApp>
+  </AuthProvider>
+)
 
-export default App;
+export default App
+
