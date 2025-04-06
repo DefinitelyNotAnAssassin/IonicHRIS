@@ -1,0 +1,7 @@
+{
+  "name": "SDCA-HRIS",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "react-vite"
+}
