@@ -16,6 +16,7 @@ import {
   IonInput,
   IonButton,
   useIonToast,
+  IonLoading,
 } from "@ionic/react"
 import { useHistory } from "react-router-dom"
 import { useAuth } from "@/hooks/use-auth"
@@ -49,6 +50,12 @@ export default function Login() {
         // Get updated user info
         const currentUser = JSON.parse(localStorage.getItem("user") || "{}")
 
+        // Check if profile is completed
+        if (!currentUser.profileCompleted) {
+          history.push("/personal-info")
+          return
+        }
+
         // Redirect based on role
         if (currentUser.role === "hr") {
           history.push("/hr")
@@ -59,6 +66,7 @@ export default function Login() {
         presentToast("Invalid email or password", "danger")
       }
     } catch (error) {
+      console.error("Login error:", error)
       presentToast("An unexpected error occurred", "danger")
     } finally {
       setIsLoading(false)
@@ -68,6 +76,7 @@ export default function Login() {
   return (
     <IonPage>
       <IonContent className="ion-padding ">
+        <IonLoading isOpen={isLoading} message="Logging in..." />
         <div
           className="ion-text-center ion-justify-content-center"
           style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}

@@ -1,158 +1,271 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import axios from 'axios';
+import { API_BASE_URL } from '../config';
+import apiService from '@/services/api-service';
 
+// Define the shape of the user object
 interface User {
-  id: string
-  email: string
-  name: string
-  role: string
-  department?: string
-  position?: string
-  profileCompleted?: boolean
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  profileCompleted?: boolean;
+  department?: string;
+  position?: string;
+  avatar?: string;
+  employeeId?: string;
 }
 
+// Define the shape of the auth context
 interface AuthContextType {
-  user: User | null
-  isAuthenticated: boolean
-  login: (email: string, password: string) => Promise<boolean>
-  register: (userData: any) => Promise<boolean>
-  logout: () => void
-  updateUserProfile: (profileData: any) => Promise<boolean>
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  logout: () => void;
+  register: (userData: any) => Promise<boolean>;
+  updateUserProfile: (profileData: any) => Promise<boolean>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+// Create the auth context
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
+// Auth provider component
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Check for existing user session on initial load
   useEffect(() => {
-    // Check if user is stored in localStorage
-    const storedUser = localStorage.getItem("user")
-    if (storedUser) {
-      setUser(JSON.parse(storedUser))
-      setIsAuthenticated(true)
-    }
-  }, [])
+    const checkUserSession = async () => {
+      try {
+        const storedUser = localStorage.getItem('user');
+        const storedToken = localStorage.getItem('token');
+        
+        if (storedUser && storedToken) {
+          const userData = JSON.parse(storedUser);
+          console.log("Checking session for stored user:", userData);
+          
+          // Fix for missing ID
+          if (!userData.id && userData.employeeId) {
+            userData.id = userData.employeeId;
+          }
+          
+          // Explicitly check if the verifySession method exists
+          if (typeof apiService.verifySession === 'function') {
+            try {
+              // Verify the session is still valid with the server
+              const response = await apiService.verifySession(userData.id);
+              
+              if (response.status === 'success' && response.valid) {
+                console.log("Session valid, setting user:", userData);
+                setUser(userData);
+                setToken(storedToken);
+              } else {
+                // If session is invalid, clear local storage
+                console.log("Session invalid, clearing user data");
+                localStorage.removeItem('user');
+                localStorage.removeItem('token');
+                setUser(null);
+                setToken(null);
+              }
+            } catch (error) {
+              console.error('Session verification failed:', error);
+              // Keep the user logged in if verification fails due to network/server issues
+              setUser(userData);
+              setToken(storedToken);
+            }
+          } else {
+            // Manual fallback verification if verifySession doesn't exist
+            console.log("verifySession not available, using manual verification");
+            
+            try {
+              // Try to fetch the user profile as a session validation
+              const response = await fetch(`${API_BASE_URL}/EmployeeController/getEmployee/${userData.id}`, {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${storedToken}`,
+                  'Content-Type': 'application/json',
+                }
+              });
+              
+              if (response.ok) {
+                // If we can fetch the profile, session is valid
+                console.log("Manual verification successful, setting user");
+                setUser(userData);
+                setToken(storedToken);
+              } else {
+                console.log("Manual verification failed, clearing user data");
+                localStorage.removeItem('user');
+                localStorage.removeItem('token');
+                setUser(null);
+                setToken(null);
+              }
+            } catch (error) {
+              console.error("Manual verification error:", error);
+              // Keep user logged in on network errors
+              setUser(userData);
+              setToken(storedToken);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Session check error:', error);
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const login = async (email: string, password: string) => {
+    checkUserSession();
+  }, []);
+
+  // Login function with improved handling and navigation
+  const login = async (email: string, password: string): Promise<boolean> => {
+    setIsLoading(true);
     try {
-      // Import employee data
-      const { employeeData } = await import("@/data/employee-data")
-
-      // Find employee by email
-      const employee = employeeData.find((emp) => emp.email.toLowerCase() === email.toLowerCase())
-
-      if (!employee) {
-        return false
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
+        email,
+        password
+      });
+      
+      if (response.data.status === 'success') {
+        // Store token and user data
+        const { token, user: userData } = response.data;
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Set the user in state
+        setUser(userData);
+        
+        console.log("Login successful, user data:", userData);
+        
+        // Return success to trigger redirection in the login component
+        return true;
       }
-
-      // In a real app, we would verify the password here
-      // For demo purposes, we'll accept any password
-
-      // Determine role based on department or position
-      const isHR = employee.department === "HR" || (employee.position && employee.position.toLowerCase().includes("hr"))
-
-      const mockUser = {
-        id: employee.id,
-        email: employee.email,
-        name: employee.name,
-        role: isHR ? "hr" : "employee",
-        department: employee.department,
-        position: employee.position,
-        profileCompleted: true,
-      }
-
-      setUser(mockUser)
-      setIsAuthenticated(true)
-      localStorage.setItem("user", JSON.stringify(mockUser))
-      return true
+      return false;
     } catch (error) {
-      console.error("Login failed:", error)
-      return false
+      console.error('Login error:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
     }
-  }
+  };
 
-  const register = async (userData: any) => {
+  // Logout function
+  const logout = async () => {
     try {
-      // In a real app, this would be an API call
-      // For demo purposes, we'll simulate a successful registration
-      const mockUser = {
-        id: Math.random().toString(36).substr(2, 9),
-        email: userData.email,
-        name: userData.firstName ? `${userData.firstName} ${userData.lastName || ""}` : "New User",
-        role: userData.department?.toLowerCase() === "hr" ? "hr" : "employee",
-        department: userData.department || "",
-        position: userData.position || "",
-        profileCompleted: false,
+      // Call logout API endpoint if needed
+      if (user) {
+        await axios.post(`${API_BASE_URL}/auth/logout`, {
+          userId: user.id
+        });
       }
-
-      setUser(mockUser)
-      setIsAuthenticated(true)
-      localStorage.setItem("user", JSON.stringify(mockUser))
-      return true
     } catch (error) {
-      console.error("Registration failed:", error)
-      return false
+      console.error('Logout error:', error);
+    } finally {
+      // Clear local storage and state
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      setUser(null);
+      setToken(null);
     }
-  }
+  };
 
-  const updateUserProfile = async (profileData: any) => {
+  // Register function
+  const register = async (userData: any): Promise<boolean> => {
+    setIsLoading(true);
     try {
-      if (!user) return false
-
-      // Determine role based on department
-      const isHR =
-        profileData.department === "HR" || (profileData.position && profileData.position.toLowerCase().includes("hr"))
-
-      // In a real app, this would be an API call
-      const updatedUser = {
-        ...user,
-        name: `${profileData.firstName || ""} ${profileData.lastName || ""}`,
-        role: isHR ? "hr" : "employee",
-        department: profileData.department || user.department,
-        position: profileData.position || user.position,
-        profileCompleted: true,
-        // Add other profile fields as needed
+      const response = await axios.post(`${API_BASE_URL}/auth/register`, userData);
+      
+      if (response.data.status === 'success') {
+        // Optionally auto-login the user after registration
+        // or just return success and redirect to login page
+        return true;
       }
-
-      setUser(updatedUser)
-      localStorage.setItem("user", JSON.stringify(updatedUser))
-      return true
+      return false;
     } catch (error) {
-      console.error("Profile update failed:", error)
-      return false
+      console.error('Registration error:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
     }
-  }
+  };
 
-  const logout = () => {
-    setUser(null)
-    setIsAuthenticated(false)
-    localStorage.removeItem("user")
-  }
+  // Update user profile function
+  const updateUserProfile = async (profileData: any): Promise<boolean> => {
+    setIsLoading(true);
+    
+    try {
+      if (!user) {
+        return false;
+      }
+      
+      // Call the API to update user profile
+      const response = await apiService.updateUserProfile(user.id, profileData);
+      
+      if (response.status === 'success') {
+        // Get the updated user data
+        const userResponse = await apiService.getUserProfile(user.id);
+        
+        if (userResponse.status === 'success' && userResponse.employee) {
+          // Update the local user object with basic profile details
+          const updatedUser = {
+            ...user,
+            name: `${profileData.firstName} ${profileData.surname}`,
+            department: profileData.department,
+            position: profileData.position,
+            profileCompleted: true // Mark the profile as completed
+          };
+          
+          // Update localStorage with the new user data
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          
+          // Update state with new user data
+          setUser(updatedUser);
+          
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Profile update error:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <AuthContext.Provider
+    <AuthContext.Provider 
       value={{
         user,
-        isAuthenticated,
+        isAuthenticated: !!user,
+        isLoading,
         login,
-        register,
         logout,
+        register,
         updateUserProfile,
       }}
     >
       {children}
     </AuthContext.Provider>
-  )
+  );
 }
 
+// Custom hook to use the auth context
 export function useAuth() {
-  const context = useContext(AuthContext)
+  const context = useContext(AuthContext);
+  
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context
+  
+  return context;
 }
 

@@ -35,13 +35,7 @@ export default function SideMenu() {
             </IonItem>
           </IonMenuToggle>
 
-          <IonMenuToggle autoHide={false}>
-            <IonItem button routerLink="/personal-info" routerDirection="root">
-              <User className="h-5 w-5 mr-3 text-red-500" />
-              <IonLabel>Personal Information</IonLabel>
-            </IonItem>
-          </IonMenuToggle>
-
+       
           <IonMenuToggle autoHide={false}>
             <IonItem button routerLink="/time-keeping" routerDirection="root">
               <Clock className="h-5 w-5 mr-3 text-red-500" />

@@ -34,10 +34,10 @@ import "@ionic/react/css/palettes/dark.system.css"
 
 /* Theme variables */
 import "./theme/variables.css"
-import Login from "./pages/Authentication/page"
+import LoginPage from "./pages/Login/page"
 import Dashboard from "./pages/Employees/Dashboard/page"
 import PersonalInfo from "./pages/PersonalInformation/page"
-import { AuthProvider } from "./hooks/use-auth"
+import { AuthProvider, useAuth } from "./hooks/use-auth"
 import ChangeSchedule from "./pages/ChangeSchedule/page"
 import Registration from "./pages/Registration/page"
 import OfficialBusiness from "./pages/OfficialBusinessForm/page"
@@ -49,7 +49,6 @@ import HR from "./pages/HR/page"
 import "chart.js/auto"
 
 // Add a protected route component to handle role-based access
-import { useAuth } from "./hooks/use-auth"
 import { useHistory } from "react-router-dom"
 import { useEffect } from "react"
 
@@ -75,6 +74,44 @@ const HRProtectedRoute: React.FC<{
   return <>{children}</>
 }
 
+// Protected route component that redirects to login if not authenticated
+const ProtectedRoute: React.FC<{
+  component: React.ComponentType<any>
+  path: string
+  exact?: boolean
+}> = ({ component: Component, ...rest }) => {
+  const { isAuthenticated, isLoading } = useAuth()
+
+  return (
+    <Route
+      {...rest}
+      render={(props) => {
+        // Show loading or redirect based on auth state
+        if (isLoading) {
+          return <div>Loading...</div>
+        }
+
+        return isAuthenticated ? (
+          <Component {...props} />
+        ) : (
+          <Redirect
+            to={{
+              pathname: "/login",
+              state: { from: props.location },
+            }}
+          />
+        )
+      }}
+    />
+  )
+}
+
+// Create a separate component for the home route
+const HomeRedirect: React.FC = () => {
+  const { isAuthenticated } = useAuth()
+  return isAuthenticated ? <Redirect to="/dashboard" /> : <Redirect to="/login" />
+}
+
 setupIonicReact()
 
 const App: React.FC = () => (
@@ -82,47 +119,18 @@ const App: React.FC = () => (
     <IonApp>
       <IonReactRouter>
         <IonRouterOutlet>
-          <Route path="/personal-info">
-            <PersonalInfo />
-          </Route>
+          <Route path="/login" component={LoginPage} exact />
+          <Route path="/dashboard" component={Dashboard} exact />
+          <Route path="/personal-info" component={PersonalInfo}  />
+          <Route path="/change-schedule" component={ChangeSchedule}  />
+          <Route path="/registration" component={Registration}  />
+          <Route path="/official-business" component={OfficialBusiness}  />
+          <Route path="/time-keeping" component={TimeKeeping} />
+          <Route path="/leaves" component={Leaves} />
+          <Route path="/hr" component={HR} />
 
-          <Route path="/dashboard">
-            <Dashboard />
-          </Route>
-
-          <Route path="/change-schedule">
-            <ChangeSchedule />
-          </Route>
-
-          <Route path="/official-business">
-            <OfficialBusiness />
-          </Route>
-
-          <Route path="/time-keeping">
-            <TimeKeeping />
-          </Route>
-
-          <Route path="/leaves">
-            <Leaves />
-          </Route>
-
-          <Route path="/hr">
-            <HRProtectedRoute>
-              <HR />
-            </HRProtectedRoute>
-          </Route>
-
-          <Route path="/login">
-            <Login />
-          </Route>
-
-          <Route path="/register">
-            <Registration />
-          </Route>
-
-          <Route exact path="/">
-            <Redirect to="/login" />
-          </Route>
+          {/* Default redirect using a component instead of render prop */}
+          <Route exact path="/" component={HomeRedirect} />
         </IonRouterOutlet>
       </IonReactRouter>
     </IonApp>

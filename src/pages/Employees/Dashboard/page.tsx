@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   IonContent,
   IonPage,
@@ -41,18 +41,137 @@ import {
 } from "lucide-react"
 import SideMenu from "@/components/side-menu"
 import Chart from "chart.js/auto"
+import apiService from "@/services/api-service"
 
 export default function Dashboard() {
   const { user, isAuthenticated } = useAuth()
   const history = useHistory()
   const attendanceChartRef = useRef<HTMLCanvasElement>(null)
   const leaveBalanceChartRef = useRef<HTMLCanvasElement>(null)
+  const [dashboardData, setDashboardData] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [attendanceMetrics, setAttendanceMetrics] = useState<any>({
+    daysPresent: 0,
+    daysAbsent: 0,
+    lateCount: 0,
+    totalLeaves: 0,
+    approvedLeaves: 0,
+    pendingLeaves: 0,
+    totalWorkHours: 0,
+    overtimeHours: 0,
+  })
 
   useEffect(() => {
     if (!isAuthenticated) {
       history.push("/login")
+    } else if (user?.id) {
+      // Fetch employee dashboard data
+      fetchEmployeeDashboardData()
     }
-  }, [isAuthenticated, history])
+  }, [isAuthenticated, history, user])
+
+  // Fetch employee dashboard data from API with better error handling
+  const fetchEmployeeDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      
+      if (!user?.id) {
+        console.error("Cannot fetch dashboard data: User ID is missing");
+        return;
+      }
+      
+      console.log(`Fetching dashboard data for user ID: ${user.id}`);
+      
+      // Fetch metrics for dashboard
+      const metricsResponse = await apiService.getEmployeeMetrics();
+      
+      // Fetch current employee details
+      const employeeResponse = await apiService.getUserProfile(user.id);
+      
+      // Fetch attendance metrics
+      try {
+        const attendanceResponse = await apiService.getAttendanceMetrics(user.id);
+        if (attendanceResponse.status === 'success' && attendanceResponse.attendanceMetrics) {
+          setAttendanceMetrics(attendanceResponse.attendanceMetrics);
+        }
+      } catch (err) {
+        console.error("Error fetching attendance metrics:", err);
+        // Use default values if error occurs
+      }
+      
+      console.log("Employee data received:", employeeResponse);
+      
+      if (metricsResponse.status === 'success') {
+        setDashboardData(prevData => ({
+          ...prevData,
+          metrics: metricsResponse.metrics
+        }));
+      }
+      
+      if (employeeResponse.status === 'success' && employeeResponse.employee) {
+        setDashboardData(prevData => ({
+          ...prevData,
+          employee: employeeResponse.employee
+        }));
+        
+        // Update leave balance chart with actual data
+        updateLeaveBalanceChart(employeeResponse.employee);
+      }
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Separate function to update leave balance chart
+  const updateLeaveBalanceChart = (employee: any) => {
+    if (!employee || !leaveBalanceChartRef.current) return;
+    
+    const leaveBalanceCtx = leaveBalanceChartRef.current.getContext("2d");
+    if (!leaveBalanceCtx) return;
+    
+    // Get leave balances with fallbacks to 0 if undefined
+    const annualLeave = employee.leaveBalance?.annual || 0;
+    const sickLeave = employee.leaveBalance?.sick || 0;
+    const emergencyLeave = employee.leaveBalance?.emergency || 0;
+    const totalLeave = 20; // Assuming total leave is 20 days
+    const remainingLeave = Math.max(0, totalLeave - (annualLeave + sickLeave + emergencyLeave));
+    
+    console.log("Updating leave balance chart with:", {
+      annual: annualLeave,
+      sick: sickLeave, 
+      emergency: emergencyLeave,
+      remaining: remainingLeave
+    });
+    
+    // Create chart
+    const leaveBalanceChart = new Chart(leaveBalanceCtx, {
+      type: "pie",
+      data: {
+        labels: ["Annual", "Sick", "Emergency", "Remaining"],
+        datasets: [
+          {
+            data: [annualLeave, sickLeave, emergencyLeave, remainingLeave],
+            backgroundColor: [
+              "rgba(239, 68, 68, 0.8)", // Red
+              "rgba(16, 185, 129, 0.8)", // Green
+              "rgba(245, 158, 11, 0.8)", // Amber
+              "rgba(59, 130, 246, 0.8)", // Blue
+            ],
+            borderColor: "#ffffff",
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+      },
+    });
+
+    return () => {
+      leaveBalanceChart.destroy();
+    };
+  };
 
   // Update the attendance chart colors
   useEffect(() => {
@@ -166,7 +285,7 @@ export default function Dashboard() {
   ]
 
   // Mock data for attendance stats
-  const attendanceStats = {
+  const attendanceStats = dashboardData?.metrics?.today_attendance || {
     daysPresent: 21,
     daysAbsent: 2,
     lateCount: 3,
@@ -190,13 +309,25 @@ export default function Dashboard() {
           </IonToolbar>
         </IonHeader>
         <IonContent className="ion-padding bg-gray-50">
+          {isLoading && (
+            <div className="flex justify-center p-4">
+              <p>Loading dashboard data...</p>
+            </div>
+          )}
+        
           <div className="p-4 md:p-6">
             {/* Welcome Banner */}
             <div className="bg-red-500 rounded-xl shadow-lg p-6 mb-8">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between">
                 <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Welcome, {user?.name || "User"}</h1>
-                  <p className="text-red-100">Access your employee dashboard tools below</p>
+                  <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
+                    Welcome, {dashboardData?.employee?.name || user?.name || "User"}
+                  </h1>
+                  <p className="text-red-100">
+                    {dashboardData?.employee?.position ? 
+                      `${dashboardData.employee.position} - ${dashboardData.employee.department}` : 
+                      'Access your employee dashboard tools below'}
+                  </p>
                 </div>
                 <div className="mt-4 md:mt-0">
                   <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 text-white">
@@ -225,7 +356,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 font-medium">Present Days</p>
-                    <h3 className="text-2xl font-bold text-gray-800">{attendanceStats.daysPresent}</h3>
+                    <h3 className="text-2xl font-bold text-gray-800">{attendanceMetrics.daysPresent || 0}</h3>
                     <p className="text-xs text-gray-500">This month</p>
                   </div>
                 </div>
@@ -239,7 +370,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 font-medium">Absent Days</p>
-                    <h3 className="text-2xl font-bold text-gray-800">{attendanceStats.daysAbsent}</h3>
+                    <h3 className="text-2xl font-bold text-gray-800">{attendanceMetrics.daysAbsent || 0}</h3>
                     <p className="text-xs text-gray-500">This month</p>
                   </div>
                 </div>
@@ -253,8 +384,8 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 font-medium">Approved Leaves</p>
-                    <h3 className="text-2xl font-bold text-gray-800">{attendanceStats.approvedLeaves}</h3>
-                    <p className="text-xs text-gray-500">Out of {attendanceStats.totalLeaves}</p>
+                    <h3 className="text-2xl font-bold text-gray-800">{attendanceMetrics.approvedLeaves || 0}</h3>
+                    <p className="text-xs text-gray-500">Out of {attendanceMetrics.totalLeaves || 0}</p>
                   </div>
                 </div>
               </IonCard>
@@ -267,8 +398,8 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 font-medium">Work Hours</p>
-                    <h3 className="text-2xl font-bold text-gray-800">{attendanceStats.totalWorkHours}</h3>
-                    <p className="text-xs text-gray-500">+{attendanceStats.overtimeHours} overtime</p>
+                    <h3 className="text-2xl font-bold text-gray-800">{attendanceMetrics.totalWorkHours || 0}</h3>
+                    <p className="text-xs text-gray-500">+{attendanceMetrics.overtimeHours || 0} overtime</p>
                   </div>
                 </div>
               </IonCard>

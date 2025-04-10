@@ -1,0 +1,1 @@
+export const API_BASE_URL = "http://localhost/codeigniter_v1/index.php"
